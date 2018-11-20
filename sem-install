@@ -3,13 +3,13 @@
 # Changing language versions
 
 VERSION="0.1"
-SUPPORTED_LANGUAGES=(elixir go php ruby python node)
+SUPPORTED_LANGUAGES=(go php ruby)
 GO_URL="https://storage.googleapis.com/golang"
 # Misc
 DATE_FORMAT='%H:%M %d/%m/%Y'
 
 ################################################################################
-# Generic function which executes the passed 'command' to switch the version
+# Generic function which executes the passed 'command' to install the version
 # Globals:
 #   language, language_version
 # Arguments:
@@ -27,29 +27,18 @@ install::install() {
 }
 
 install::install_ruby() {
-  rbenv install  ${language_version}
-  
-  return $?
-}
+#  echo "138.201.33.90 packages.rt.com" | sudo tee -a /etc/hosts
+  response=$(curl -H "Host: packages.rt.com" --write-out %{http_code} --head --silent --output /dev/null http://138.201.33.90/ruby/${language_version}.tar.gz)
+  if [[ $response -ne 200 ]] ; then
+    rbenv install -s ${language_version}
+  else
+    curl -H "Host: packages.rt.com" --silent http://138.201.33.90/ruby/${language_version}.tar.gz --output ${language_version}.tar.gz
+    tar -zxf ${language_version}.tar.gz
+    mv ${language_version} ~/.rbenv/versions/
+  fi
+    rbenv rehash
+    rbenv global ${language_version}
 
-install::install_node() {
-  #version::change "nvm use"
-  nvm install ${language_version}
-  npm install -g grunt-cli bower
-  nvm alias default  ${language_version}
-
-  return $?
-}
-
-install::install_elixir() {
-  #version::change "kiex use"
-  kiex install ${language_version}
-  #kiex alias ${language_version} 
-  echo 'source ~/.kerl/installs/21/activate' >> ~/.kiex/elixirs/elixir-${language_version}.env # ????? erlang version
-  kiex default ${language_version}
-  kiex use ${language_version}
-  mix local.hex --force
-  
   return $?
 }
 
@@ -64,19 +53,24 @@ install::install_go() {
 
 
 install::install_php() {
-  phpbrew install ${language_version} +default +dbs +openssl -- --with-curl=/usr/local
-  sem-version php {$language_version}
+  response=$(curl --write-out %{http_code} --head -H "Host: packages.rt.com" --silent --output /dev/null http://138.201.33.90/php/${language_version}.tar.gz)
+  if [[ $response -ne 200 ]] ; then
+    phpbrew install -j 4 ${language_version} +default +dbs +openssl -- --with-curl=/usr/local
+    echo "date.timezone = UTC" >> "~/.phpbrew/php/php-${language_version}/etc/php.ini"
+    phpbrew ext install imap -- --with-kerberos --with-imap-ssl
+    phpbrew ext install gd -- --enable-gd-native-ttf --with-freetype-dir=/usr/lib/x86_64-linux-gnu
+  else
+    curl -H "Host: packages.rt.com" --silent http://138.201.33.90/php/${language_version}.tar.gz --output ${language_version}.tar.gz
+    tar -zxf ${language_version}.tar.gz 
+    mv php-${language_version} ~/.phpbrew/php/
+  fi
+
+  phpbrew switch {$language_version}
   return $?
 }
 
-install::install_python() {
-  #version::change "change-python-version"
-  echo "install python ${language_version}"
-
-  return $?
-}
 ################################################################################
-# End of language manager wrappers
+# End of language installer wrappers
 ################################################################################
 
 
@@ -91,7 +85,7 @@ install::install_python() {
 install::usage() {
   echo -e "
 ################################################################################
-sem-install ${VERSION} | Utility to change a selected languages active version
+sem-install ${VERSION} | Utility to install a selected languages version and activate it
 
 Usage:
   sem-install language version
